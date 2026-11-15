@@ -4,15 +4,26 @@
 
 [![Download Windows Installer](https://img.shields.io/badge/⬇_Download-Windows_Installer-2ea44f?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/azizr12/jxlshot/releases/latest/download/jxlshot-setup-x64.exe)
 
+## Overview
+
 - Small c project to capture monitor screenshot using jxl image codec on windows.
+  
 > The entire idea here is to build a screenshot app using jxl  to achieve great compression and good quality unlike jpeg which give bad quality and bad colors and png has mid compression
-- to use it as screenshot app run the installer and it will run in background and give you two option either capture specific region or whole monitor and path for export or picture folder as default
+
+## How to use
+
+- to use it as screenshot app run the installer and it will run in background and give you two option either capture specific region or whole monitor and path for export or picture folder as default.
 - & launching the app normally opens the Capture Tool window
 
-- there is also keyboard shortcut you either press imprscreen key to capture full screenshot or ctrl+imprscreen to pick a region to screenshot or use them from tray menu(you have the freedom to change combo keys from settings)
+- there is also keyboard shortcut you either press **`Print Screen`** key to capture full screenshot or **`Ctrl` + `Print Screen`** to pick a region to screenshot or use them from tray menu(you have the freedom to change combo keys from settings)
 
-- and it has also config for controlling lossy compression or keep lossless as default from setttings
+- and it has also config for controlling lossy compression or keep lossless as default from setttings (Effort 7 is recommended)
 
 - also there is HDR support too, alongside DPI and colors support, and multi-monitor.
 
-- ***. . .***
+## Recommended Applications for JXL
+
+- **Microsoft Photos** & **BandiView** : For HDR
+- **[JPEGView_L](https://github.com/KrokusPokus/JPEGView_L)** : For Speed & SDR
+
+***. . .***
