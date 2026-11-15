@@ -1,6 +1,7 @@
 v2.5.1 - 15 November 2026
 - running the exe normally now opens the "Capture Tool" window;
 - added -silent flag for the tray on start up
+- bumped libjxl 0.12.0 -> 0.13.0
 
 
 v2.5.0 - 10 November 2026
