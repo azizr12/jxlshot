@@ -1,4 +1,4 @@
-v2.5.1 - 14 November 2026
+v2.5.1 - 15 November 2026
 - running the exe normally now opens the "Capture Tool" window;
 - added -silent flag for the tray on start up
 
