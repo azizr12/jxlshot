@@ -36,7 +36,7 @@ BEGIN
             VALUE "InternalName",     "jxlshot_tray"
             VALUE "LegalCopyright",   "Copyright (c) 2026 azizr12"
             VALUE "OriginalFilename", "jxlshot_tray.exe"
-            VALUE "ProductName",      "jxlshot"
+            VALUE "ProductName",      "JXL Shot"
             VALUE "ProductVersion",   APP_VERSION_STR
         END
     END
