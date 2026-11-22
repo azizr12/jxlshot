@@ -23,7 +23,7 @@
 
 ## Recommended Applications for JXL
 
-- **Microsoft Photos** & **BandiView** : For HDR
+- **Microsoft Photos** & **BandiView Pro** : For HDR , Checkout [#9](https://github.com/azizr12/jxlshot/issues/9)
 - **[JPEGView_L](https://github.com/KrokusPokus/JPEGView_L)** : For Speed & SDR
 
 ***. . .***
