@@ -975,6 +975,33 @@ static void execute_full_capture(void) {
             return;
         }
 
+        // If only ONE valid monitor is detected, capture it normally 
+        // WITHOUT the "_m1" suffix to keep the filename clean.
+        if (count == 1) {
+            Grab g;
+            ZeroMemory(&g, sizeof(g));
+            if (!grab_monitor(&g, monitors[0].hmon)) {
+                dbg("execute_full_capture: single monitor grab failed");
+                MessageBoxW(NULL, L"Screen capture failed.", L"jxlshot", MB_ICONERROR);
+                settings_finish_capture();
+                return;
+            }
+
+            wchar_t out_path[MAX_PATH];
+            build_out_path(out_path, MAX_PATH, g.is_hdr); // Passes NULL tag internally
+            dbg("execute_full_capture: single monitor -> %ls", out_path);
+
+            gui_open_capture_viewer(&g, out_path);
+
+            if (!queue_grab_encode(&g, out_path, 0)) {
+                MessageBoxW(NULL, L"Encoding or saving failed.", L"jxlshot", MB_ICONERROR);
+            }
+            free_grab(&g);
+            settings_finish_capture();
+            return;
+        }
+
+
         int saved = 0;
         for (int i = 0; i < count; i++) {
             Grab g;
@@ -1010,6 +1037,7 @@ static void execute_full_capture(void) {
         return;
     }
 
+
     Grab g;
     ZeroMemory(&g, sizeof(g));
     if (!grab_monitor(&g, monitor_under_cursor())) {
@@ -1022,7 +1050,6 @@ static void execute_full_capture(void) {
     wchar_t out_path[MAX_PATH];
     build_out_path(out_path, MAX_PATH, g.is_hdr);
     dbg("execute_full_capture: writing to %ls", out_path);
-
     // Hand the saved path to the viewer once the encoder is done with it.
     gui_open_capture_viewer(&g, out_path);
 

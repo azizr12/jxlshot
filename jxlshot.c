@@ -1122,9 +1122,15 @@ static BOOL CALLBACK monitor_enum_cb(HMONITOR hmon, HDC hdc, LPRECT rc, LPARAM l
 
     MONITORINFO mi = { sizeof(mi) };
     if (GetMonitorInfoW(hmon, &mi)) {
-        ctx->items[ctx->count].hmon = hmon;
-        ctx->items[ctx->count].rc = mi.rcMonitor;
-        ctx->count++;
+        // Filter out phantom/disconnected monitors that Windows caches
+        int w = mi.rcMonitor.right - mi.rcMonitor.left;
+        int h = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        
+        if (w > 0 && h > 0) {
+            ctx->items[ctx->count].hmon = hmon;
+            ctx->items[ctx->count].rc = mi.rcMonitor;
+            ctx->count++;
+        }
     }
     return TRUE;
 }
