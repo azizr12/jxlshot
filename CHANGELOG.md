@@ -1,5 +1,5 @@
 v2.5.2 - 
-
+- fixed multimonitor naming issue
 
 v2.5.1 - 15 November 2026
 - running the exe normally now opens the "Capture Tool" window;
