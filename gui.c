@@ -14,9 +14,8 @@
 
 #define GUI_BTN_COUNT    4
 
-// Close button shared by the strip and the settings window
+// Close button slot width; the glyph and stroke scale with DPI.
 #define GUI_CLOSE_W      34
-#define GUI_CLOSE_GLYPH  4
 
 #define IDC_GUI_FULL     301
 #define IDC_GUI_REGION   302
@@ -27,9 +26,7 @@
 #define TIMER_GUI_CAPTURE     1
 #define GUI_CAPTURE_DELAY_MS  220
 
-// Palette. These are variables, not #defines, so the Dark/Light toggle can swap
-// the whole window between themes at runtime. gui_update_theme fills them from
-// g_cfg.dark_mode before any painting happens.
+// Palette, filled by gui_update_theme from g_cfg.dark_mode.
 static COLORREF g_guiBg, g_guiBtn, g_guiBtnHot, g_guiBtnDown, g_guiBorder;
 static COLORREF g_guiAccent, g_guiText, g_guiDim;
 
@@ -97,36 +94,61 @@ static const struct {
 
 static int  g_guiThemeHot = 0;   // 0 none, 1 Dark segment, 2 Light segment
 
-// Win8.1/10 style close glyph
+// Windows 10/11 caption close button, same palette as the shell:
+//   idle     no fill, themed glyph
+//   hover    #E81123 fill, white glyph
+//   pressed  #F1707A fill, white glyph
+// The glyph is the shell's own icon-font glyph (Segoe MDL2 Assets U+E8BB at
+// 10 DIP), not hand-drawn lines.
+#define CAP_CLOSE_HOVER    RGB(232, 17, 35)   // #E81123
+#define CAP_CLOSE_PRESSED  RGB(241, 112, 122) // #F1707A
+#define CAP_GLYPH_SIZE     10                 // 96-DPI design size, in DIPs
+#define CAP_GLYPH_CHAR     L"\uE8BB"          // ChromeClose
+#define CAP_GLYPH_FACE     L"Segoe MDL2 Assets"
 
-static void gui_draw_close_icon(HDC dc, int cx, int cy, int extent, COLORREF col) {
-    HPEN pen = CreatePen(PS_SOLID, 1, col);
-    if (!pen) return;
-    HPEN oldPen = (HPEN)SelectObject(dc, pen);
+static void gui_draw_close_icon(HDC dc, const RECT *btn, int dpi, COLORREF col) {
+    int dim = ui_scale(dpi, CAP_GLYPH_SIZE);
 
-    int s = extent * 2;
-    int l = cx - extent;
-    int t = cy - extent;
+    HFONT font = CreateFontW(-dim, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                             CAP_GLYPH_FACE);
+    if (!font) return;
 
-    MoveToEx(dc, l, t, NULL);
-    LineTo(dc, l + s, t + s);
-    MoveToEx(dc, l + s - 1, t, NULL);
-    LineTo(dc, l - 1, t + s);
+    HFONT oldFont = (HFONT)SelectObject(dc, font);
 
-    SelectObject(dc, oldPen);
-    DeleteObject(pen);
+    // CreateFont substitutes a different family when the requested one is
+    // missing, which would draw junk; only trust the glyph if the face matched.
+    wchar_t face[LF_FACESIZE] = L"";
+    GetTextFaceW(dc, LF_FACESIZE, face);
+
+    if (lstrcmpiW(face, CAP_GLYPH_FACE) == 0) {
+        RECT r = *btn;
+        int oldMode = SetBkMode(dc, TRANSPARENT);
+        COLORREF oldColor = SetTextColor(dc, col);
+        DrawTextW(dc, CAP_GLYPH_CHAR, -1, &r,
+                  DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+        SetTextColor(dc, oldColor);
+        SetBkMode(dc, oldMode);
+    }
+
+    SelectObject(dc, oldFont);
+    DeleteObject(font);
 }
 
-// Flat close button used by both windows
-static void gui_draw_close_button(HDC dc, const RECT *rc, BOOL hot, BOOL fillIdle,
-                                  COLORREF idleBg, COLORREF idleFg, int extent) {
-    if (hot || fillIdle) {
-        HBRUSH b = CreateSolidBrush(hot ? RGB(232, 17, 35) : idleBg);
-        FillRect(dc, rc, b);
-        DeleteObject(b);
+// Flat caption button used by every window in the app.
+// state: 0 = idle, 1 = hover, 2 = pressed.
+static void gui_draw_close_button(HDC dc, const RECT *rc, int state, BOOL fillIdle,
+                                  COLORREF idleBg, COLORREF idleFg, int dpi) {
+    if (state) {
+        HBRUSH b = CreateSolidBrush(state == 2 ? CAP_CLOSE_PRESSED : CAP_CLOSE_HOVER);
+        if (b) { FillRect(dc, rc, b); DeleteObject(b); }
+    } else if (fillIdle) {
+        HBRUSH b = CreateSolidBrush(idleBg);
+        if (b) { FillRect(dc, rc, b); DeleteObject(b); }
     }
-    gui_draw_close_icon(dc, (rc->left + rc->right) / 2, (rc->top + rc->bottom) / 2,
-                        extent, hot ? RGB(255, 255, 255) : idleFg);
+
+    gui_draw_close_icon(dc, rc, dpi, state ? RGB(255, 255, 255) : idleFg);
 }
 
 
@@ -136,6 +158,7 @@ static HFONT   g_guiTitleFont = NULL;
 static HFONT   g_guiCardFont = NULL;
 static HWND    g_guiHoverBtn = NULL;
 static BOOL    g_guiCloseHot = FALSE;
+static BOOL    g_guiCloseDown = FALSE;
 static int     g_guiPendingCapture = 0; // 0 = idle, 1 = full, 2 = region
 
 
@@ -204,10 +227,7 @@ static void gui_get_layout(HWND hwnd, GuiLayout *L) {
     L->height = rc.bottom;
     L->dpi = ui_dpi_for_window(hwnd);
 
-    // One UI only: the compact strip with the small title bar and icons. It
-    // stays exactly like this at every window size, so expanding the window
-    // just gives the same four cards more room. Metrics are 96-DPI design
-    // values scaled to the monitor the window is on.
+    // 96-DPI design values scaled to the window's monitor.
     L->titleH = ui_scale(L->dpi, 24);
     L->margin = ui_scale(L->dpi, 8);
     L->gap = ui_scale(L->dpi, 4);
@@ -777,7 +797,7 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                             pr->right - pr->left, pr->bottom - pr->top,
                             SWP_NOZORDER | SWP_NOACTIVATE);
             }
-            gui_create_fonts(ui_dpi_for_window(hwnd));   // was LOWORD(wp)
+            gui_create_fonts(ui_dpi_for_window(hwnd));
             gui_layout_children(hwnd);
             if (g_hwnd_catcher) position_settings_window(g_hwnd_catcher);
             InvalidateRect(hwnd, NULL, FALSE);
@@ -897,9 +917,10 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 SelectObject(dc, oldThemeFont);
             }
 
-            // Close button: same flat red rectangle as the Settings window's.
-            gui_draw_close_button(dc, &closeRc, g_guiCloseHot, FALSE,
-                                  0, GUI_TEXT, ui_scale(L.dpi, GUI_CLOSE_GLYPH));
+            // Close button
+            gui_draw_close_button(dc, &closeRc,
+                                  g_guiCloseDown ? 2 : (g_guiCloseHot ? 1 : 0),
+                                  FALSE, 0, GUI_TEXT, L.dpi);
 
             SelectObject(dc, oldFont);
             EndPaint(hwnd, &ps);
@@ -1010,6 +1031,20 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
 
+        case WM_NCMOUSEMOVE:
+            // The caption is non-client, so hover must also clear here.
+            if (g_guiCloseHot || g_guiThemeHot) {
+                GuiLayout L;
+                gui_get_layout(hwnd, &L);
+                RECT closeRc = gui_close_rect(&L);
+                RECT themeRc = gui_theme_rect(&L, &closeRc);
+                g_guiCloseHot = FALSE;
+                g_guiThemeHot = 0;
+                InvalidateRect(hwnd, &closeRc, FALSE);
+                InvalidateRect(hwnd, &themeRc, FALSE);
+            }
+            break;
+
         case WM_LBUTTONDOWN: {
             POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
             GuiLayout L;
@@ -1018,7 +1053,10 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RECT themeRc = gui_theme_rect(&L, &closeRc);
 
             if (PtInRect(&closeRc, pt)) {
-                DestroyWindow(hwnd);
+                // Caption buttons act on release, not on press.
+                g_guiCloseDown = TRUE;
+                SetCapture(hwnd);
+                InvalidateRect(hwnd, &closeRc, FALSE);
                 return 0;
             }
             if (PtInRect(&themeRc, pt)) {
@@ -1047,6 +1085,35 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
 
+        case WM_LBUTTONUP: {
+            if (!g_guiCloseDown) break;
+
+            g_guiCloseDown = FALSE;
+            ReleaseCapture();
+
+            GuiLayout L;
+            gui_get_layout(hwnd, &L);
+            RECT closeRc = gui_close_rect(&L);
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+
+            if (PtInRect(&closeRc, pt)) {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            InvalidateRect(hwnd, &closeRc, FALSE);
+            return 0;
+        }
+
+        case WM_CAPTURECHANGED:
+            if (g_guiCloseDown) {
+                g_guiCloseDown = FALSE;
+                GuiLayout L;
+                gui_get_layout(hwnd, &L);
+                RECT closeRc = gui_close_rect(&L);
+                InvalidateRect(hwnd, &closeRc, FALSE);
+            }
+            break;
+
         case WM_KEYDOWN:
             if (wp == VK_ESCAPE) {
                 DestroyWindow(hwnd);
@@ -1074,6 +1141,7 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             g_guiPendingCapture = 0;
             g_guiHoverBtn = NULL;
             g_guiCloseHot = FALSE;
+            g_guiCloseDown = FALSE;
             g_guiThemeHot = 0;
 
             if (g_guiBgBrush)   { DeleteObject(g_guiBgBrush);   g_guiBgBrush = NULL; }
@@ -1116,7 +1184,7 @@ static BOOL gui_has_saved_geometry(void) {
 }
 
 static void execute_gui(void) {
-    // Single instance: focus the existing window instead of creating another.
+    // Single instance: focus the existing window.
     if (g_hwndGui) {
         if (!IsWindowVisible(g_hwndGui)) ShowWindow(g_hwndGui, SW_SHOW);
         SetForegroundWindow(g_hwndGui);

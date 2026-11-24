@@ -269,13 +269,12 @@ static void format_hotkey_string(UINT vk, UINT mod, wchar_t *out, size_t out_siz
 #define HK_STEP_W   34
 #define HK_VAL_W    64
 
-// Close button: a square, flush in the corner, exactly like the Windows 8/10
-// title-bar close button.
-#define HK_CLOSE_W     40
-#define HK_CLOSE_GLYPH 5
+// Close button: 46 px wide, the Windows caption-button metric. hk_layout_children
+// insets it by the 1 px frame so its fill never covers the window border.
+#define HK_CLOSE_W     46
 
-static void gui_draw_close_button(HDC dc, const RECT *rc, BOOL hot, BOOL fillIdle,
-                                  COLORREF idleBg, COLORREF idleFg, int extent);
+static void gui_draw_close_button(HDC dc, const RECT *rc, int state, BOOL fillIdle,
+                                  COLORREF idleBg, COLORREF idleFg, int dpi);
 
 static int g_hkDpi = 96;
 
@@ -286,8 +285,7 @@ static int hk_s(int px)     { return ui_scale(g_hkDpi, px); }
 static int hk_dn_x(void)    { return hk_w() - hk_s(16 + HK_STEP_W + HK_VAL_W + HK_STEP_W); }
 static int hk_up_x(void)    { return hk_w() - hk_s(16 + HK_STEP_W); }
 
-// Same idea as the GUI palette: variables so the settings window can follow the
-// sun/moon toggle instead of being permanently dark.
+// Settings palette, filled by hk_update_theme from g_cfg.dark_mode.
 static COLORREF g_hkBg, g_hkBtn, g_hkBtnHot, g_hkBtnDown, g_hkBorder;
 static COLORREF g_hkAccent, g_hkText, g_hkDim;
 
@@ -438,12 +436,10 @@ static void hk_draw_button(LPDRAWITEMSTRUCT di) {
                   (id == IDC_PREVIEW && g_cfg.show_preview) ||
                   (id == IDC_DISABLE_HOOK && g_cfg.disable_keyboard_hook == 0);
 
-    // The settings close button is drawn by the exact same code as the strip's
-    // close button: a square idle box in the window colour, theme glyph, red on
-    // hover, like the Windows 8/10 title-bar button.
+    // Same caption button as the strip and About.
     if (id == IDC_HK_CLOSE) {
-        gui_draw_close_button(dc, &rc, hot, TRUE, HK_BG, HK_TEXT,
-                              hk_s(HK_CLOSE_GLYPH));
+        gui_draw_close_button(dc, &rc, down ? 2 : (hot ? 1 : 0), TRUE, HK_BG, HK_TEXT,
+                              g_hkDpi);
         return;
     }
 
@@ -526,7 +522,8 @@ static void hk_layout_children(HWND hwnd) {
     struct { int id; int x, y, w, h; } b[] = {
         { IDC_HK_FULL,      m, hk_s(48),  bw, hk_s(38) },
         { IDC_HK_REGION,    m, hk_s(94),  bw, hk_s(38) },
-        { IDC_HK_CLOSE,     hk_w() - cw, 0, cw, th },
+        // Inset by the 1 px frame WM_PAINT draws, otherwise the button erases it.
+        { IDC_HK_CLOSE,     hk_w() - cw - 1, 1, cw, th - 1 },
         { IDC_LOSSLESS,     m, hk_s(HK_Y_LOSS), bw, row },
         { IDC_DIST_DN,      hk_dn_x(), hk_s(HK_Y_DIST), step, row },
         { IDC_DIST_UP,      hk_up_x(), hk_s(HK_Y_DIST), step, row },
@@ -641,18 +638,6 @@ static LRESULT CALLBACK CatcherWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             RECT hs = { m, ySys, W - m, ySys + hk_s(16) };
             DrawTextW(dc, L"System", -1, &hs, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
 
-            // Current export folder, right-aligned in the section header.
-            {
-                const wchar_t *slash = wcsrchr(g_cfg.export_path, L'\\');
-                const wchar_t *name = (slash && slash[1]) ? slash + 1 : g_cfg.export_path;
-                if (name[0]) {
-                    RECT er = { W / 2, ySys, W - m, ySys + hk_s(16) };
-                    DrawTextW(dc, name, -1, &er,
-                              DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_END_ELLIPSIS);
-                }
-            }
-
-
             RECT info = { m, H - hk_s(35), W - m, H - hk_s(5) };
             SIZE sz;
 
@@ -703,7 +688,7 @@ static LRESULT CALLBACK CatcherWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ScreenToClient(hwnd, &pt);
             if (pt.y >= 0 && pt.y < hk_title_h() &&
-                pt.x < hk_w() - hk_s(HK_CLOSE_W)) return HTCAPTION; // drag area
+                pt.x < hk_w() - hk_s(HK_CLOSE_W) - 1) return HTCAPTION; // drag area
             return HTCLIENT;
         }
         case WM_DRAWITEM:
