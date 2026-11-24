@@ -1,19 +1,9 @@
-//       https://github.com/azizr12/jxlshot/
+//      https://github.com/azizr12/jxlshot/
 
-/* ofc this will get flag as a virus
- * because its a c code and need low level access to work
- * there is no malware or shit
- * 
- * leave the app if you are paranoid ! !
- * trying to implement something will make this just garbage app
- * that take megabytes of binary data for a stupid key detection
- * fuck false postive and fuck modern antiviruses
- * RegisterHotKey  is shit tried it and always fail
- *
- * its just a vibe code bullshit
- * leave the app if you are paranoid
- */
-
+// this app purpose is to be light and small.
+// less garbage UI, and code = speed
+// trying to implement something fancy will just make it like the others
+// who take megabytes of binary data for a stupid key detection & screenshot
 
 // jxlshot_tray.c — System tray extension for jxlshot.
 
@@ -734,7 +724,8 @@ static LRESULT CALLBACK CatcherWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                     break;
 
                 case IDC_DISABLE_HOOK:
-                    g_cfg.disable_keyboard_hook = !g_cfg.disable_keyboard_hook;                    {
+                    g_cfg.disable_keyboard_hook = !g_cfg.disable_keyboard_hook;
+                    {
                         wchar_t s[32];
                         _snwprintf(s, 32, L"%d", g_cfg.disable_keyboard_hook);
                         WritePrivateProfileStringW(L"Capture", L"DisableKeyboardHook", s, g_ini_path);
@@ -761,7 +752,6 @@ static LRESULT CALLBACK CatcherWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE && g_hotkeyCapturing) hk_end_capture(hwnd);
             return 0;
-        case WM_CLOSE: DestroyWindow(hwnd); return 0;
         case WM_DESTROY:
             g_hotkeyCapturing = FALSE;
             g_catcher_target = 0;
@@ -2358,7 +2348,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 // This guarantees Esc works even if Windows refuses to give the overlay keyboard focus,
 // and prevents the Esc key from accidentally exiting fullscreen games or closing underlying menus.
 
-        if (g_hwndRegion && pKB->vkCode == VK_ESCAPE && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+        if (g_hwndRegion && pKB->vkCode == VK_ESCAPE && k_down) {
             PostMessageW(g_hwndRegion, WM_KEYDOWN, VK_ESCAPE, 0);
             return 1; // Block the key from reaching the underlying application
         }

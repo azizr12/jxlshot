@@ -30,7 +30,6 @@
 static COLORREF g_guiBg, g_guiBtn, g_guiBtnHot, g_guiBtnDown, g_guiBorder;
 static COLORREF g_guiAccent, g_guiText, g_guiDim;
 
-#define GUI_BG        (g_guiBg)
 #define GUI_BTN       (g_guiBtn)
 #define GUI_BTN_HOT   (g_guiBtnHot)
 #define GUI_BTN_DOWN  (g_guiBtnDown)
@@ -205,8 +204,7 @@ static void gui_save_theme(void) {
 static void gui_save_window_state(void) {
     wchar_t s[32];
 
-    WritePrivateProfileStringW(L"Capture", L"DarkMode",
-        g_cfg.dark_mode ? L"1" : L"0", g_ini_path);
+    gui_save_theme();
 
     _snwprintf(s, 32, L"%d", g_cfg.gui_x); WritePrivateProfileStringW(L"Capture", L"GuiX", s, g_ini_path);
     _snwprintf(s, 32, L"%d", g_cfg.gui_y); WritePrivateProfileStringW(L"Capture", L"GuiY", s, g_ini_path);
@@ -285,8 +283,6 @@ static void gui_clamp_to_monitor(RECT *r) {
 
     if (w > maxW) w = maxW;
     if (h > maxH) h = maxH;
-    if (w > availW)    w = availW;
-    if (h > availH)    h = availH;
     if (w < minW) w = minW;
     if (h < minH) h = minH;
     if (w > availW)    w = availW;   // monitor narrower than the minimum
@@ -315,6 +311,20 @@ static void gui_layout_children(HWND hwnd) {
         if (hb) MoveWindow(hb, x, L.btnTop, L.btnW, L.btnH, TRUE);
         x += L.btnW + L.gap;
     }
+}
+
+// Clears the close / theme hover state and repaints both areas.
+static void gui_clear_hot(HWND hwnd) {
+    if (!g_guiCloseHot && !g_guiThemeHot) return;
+
+    GuiLayout L;
+    gui_get_layout(hwnd, &L);
+    RECT closeRc = gui_close_rect(&L);
+    RECT themeRc = gui_theme_rect(&L, &closeRc);
+    g_guiCloseHot = FALSE;
+    g_guiThemeHot = 0;
+    InvalidateRect(hwnd, &closeRc, FALSE);
+    InvalidateRect(hwnd, &themeRc, FALSE);
 }
 
 
@@ -712,9 +722,8 @@ static void gui_open_capture_now(void) {
 static void gui_capture_saved(const wchar_t *path) {
     if (!path || !path[0]) return;
 
-    BOOL match = FALSE;
     AcquireSRWLockShared(&g_viewerLock);
-    match = (g_viewerPath[0] && _wcsicmp(g_viewerPath, path) == 0);
+    BOOL match = (g_viewerPath[0] && _wcsicmp(g_viewerPath, path) == 0);
     ReleaseSRWLockShared(&g_viewerLock);
     if (!match) return;
 
@@ -881,7 +890,7 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RECT themeRc = gui_theme_rect(&L, &closeRc);
 
             // Title bar.
-            RECT tr = { L.margin, 0, themeRc.left - 8, L.titleH };
+            RECT tr = { L.margin, 0, themeRc.left - ui_scale(L.dpi, 8), L.titleH };
             HFONT oldFont = (HFONT)SelectObject(dc, g_guiTitleFont);
             SetTextColor(dc, GUI_TEXT);
             DrawTextW(dc, L"JXL Shot", -1, &tr,
@@ -981,8 +990,8 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (left)  return top ? HTTOPLEFT    : (bottom ? HTBOTTOMLEFT  : HTLEFT);
             if (right) return top ? HTTOPRIGHT   : (bottom ? HTBOTTOMRIGHT : HTRIGHT);
             if (bottom) return HTBOTTOM;
-            if (top && pt.y >= 0) return HTTOP;
-            if (pt.y >= 0 && pt.y < L.titleH) return HTCAPTION;
+            if (top) return HTTOP;
+            if (pt.y < L.titleH) return HTCAPTION;
             return HTCLIENT;
         }
 
@@ -1019,30 +1028,12 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         case WM_MOUSELEAVE:
             SetCursor(LoadCursorW(NULL, IDC_ARROW));
-            if (g_guiCloseHot || g_guiThemeHot) {
-                GuiLayout L;
-                gui_get_layout(hwnd, &L);
-                RECT closeRc = gui_close_rect(&L);
-                RECT themeRc = gui_theme_rect(&L, &closeRc);
-                g_guiCloseHot = FALSE;
-                g_guiThemeHot = 0;
-                InvalidateRect(hwnd, &closeRc, FALSE);
-                InvalidateRect(hwnd, &themeRc, FALSE);
-            }
+            gui_clear_hot(hwnd);
             return 0;
 
         case WM_NCMOUSEMOVE:
             // The caption is non-client, so hover must also clear here.
-            if (g_guiCloseHot || g_guiThemeHot) {
-                GuiLayout L;
-                gui_get_layout(hwnd, &L);
-                RECT closeRc = gui_close_rect(&L);
-                RECT themeRc = gui_theme_rect(&L, &closeRc);
-                g_guiCloseHot = FALSE;
-                g_guiThemeHot = 0;
-                InvalidateRect(hwnd, &closeRc, FALSE);
-                InvalidateRect(hwnd, &themeRc, FALSE);
-            }
+            gui_clear_hot(hwnd);
             break;
 
         case WM_LBUTTONDOWN: {
@@ -1061,7 +1052,7 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (PtInRect(&themeRc, pt)) {
                 int mid = (themeRc.left + themeRc.right) / 2;
-                BOOL wantDark = (pt.x < mid) ? TRUE : FALSE;
+                BOOL wantDark = (pt.x < mid);
                 if (g_cfg.dark_mode == wantDark) return 0;
 
                 g_cfg.dark_mode = wantDark;
@@ -1080,7 +1071,6 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     if (hb) InvalidateRect(hb, NULL, TRUE);
                 }
                 InvalidateRect(hwnd, NULL, TRUE);
-                return 0;
             }
             return 0;
         }
@@ -1120,10 +1110,6 @@ static LRESULT CALLBACK GuiWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 return 0;
             }
             break;
-
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
-            return 0;
 
         case WM_DESTROY: {
             // Save position and size before destroying
@@ -1207,8 +1193,7 @@ static void execute_gui(void) {
 
     static BOOL registered = FALSE;
     if (!registered) {
-        WNDCLASSEXW wc = {0};
-        wc.cbSize = sizeof(wc);
+        WNDCLASSEXW wc = { sizeof(wc) };
         wc.lpfnWndProc = GuiWindowProc;
         wc.hInstance = GetModuleHandleW(NULL);
         wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
@@ -1235,9 +1220,14 @@ static void execute_gui(void) {
     MONITORINFO mi;
     ZeroMemory(&mi, sizeof(mi));
     mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(mon, &mi);
+    if (!GetMonitorInfoW(mon, &mi)) {
+        // Fall back to the primary screen instead of a 0x0 monitor rect.
+        mi.rcMonitor.left = mi.rcMonitor.top = 0;
+        mi.rcMonitor.right  = GetSystemMetrics(SM_CXSCREEN);
+        mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+        mi.rcWork = mi.rcMonitor;
+    }
     RECT wa = mi.rcMonitor; // physical monitor pixels
-    int dpi = ui_dpi_for_monitor(mon);
 
     int x, y, w, h;
     if (hasGeometry) {
@@ -1255,17 +1245,6 @@ static void execute_gui(void) {
         w = MulDiv(screenW, 32, 100);
         h = MulDiv(screenH, 18, 100);
 
-        int minW = ui_scale(dpi, GUI_MIN_W);
-        int minH = ui_scale(dpi, GUI_MIN_H);
-        int maxW = ui_scale(dpi, GUI_MAX_W);
-        int maxH = ui_scale(dpi, GUI_MAX_H);
-        if (w < minW) w = minW;
-        if (h < minH) h = minH;
-        if (w > maxW) w = maxW;
-        if (h > maxH) h = maxH;
-        if (w > screenW) w = screenW;
-        if (h > screenH) h = screenH;
-
         // Centre inside the visible desktop so the first window is never
         // hidden under the taskbar or partly off-screen.
         RECT work = mi.rcWork;
@@ -1273,6 +1252,7 @@ static void execute_gui(void) {
         y = work.top + ((work.bottom - work.top) - h) / 2;
     }
 
+    // Applies the min/max size limits and keeps the strip inside the monitor.
     RECT wr = { x, y, x + w, y + h };
     gui_clamp_to_monitor(&wr);
     x = wr.left;

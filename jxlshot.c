@@ -334,26 +334,8 @@ static void init_config(void) {
     // Force Windows to drop its cached copy of this INI and re-read from disk.
     WritePrivateProfileStringW(NULL, NULL, NULL, ini_path);
 
-    // Set absolute defaults first
-    g_cfg.debug_enabled = 1;
-    g_cfg.lossless = 1; 
-    g_cfg.distance = 1.0f; 
-    g_cfg.blank_check_mode = 2;
-    g_cfg.effort = 7;
-    g_cfg.multimonitor = 0;
-    g_cfg.hk_full_mod = 0; 
-    g_cfg.hk_full_vk = VK_SNAPSHOT;
-    g_cfg.hk_region_mod = MOD_CONTROL; 
-    g_cfg.hk_region_vk = VK_SNAPSHOT;
-    g_cfg.disable_keyboard_hook = 0;
-    g_cfg.show_preview = 1;
-
-
-    g_cfg.dark_mode = 1;
-    g_cfg.gui_x = 0;
-    g_cfg.gui_y = 0;
-    g_cfg.gui_w = 0;
-    g_cfg.gui_h = 0;
+    // Every other field gets its default from the get_cfg_* calls below.
+    // Only the export path needs a default set first.
     
     // Use Known Folders API to correctly resolve localized folder names
     PWSTR pszPicturesPath = NULL;
@@ -1464,8 +1446,6 @@ static int encode_jxl_identity(const uint8_t *rgb, int w, int h, int is_hdr, int
     t_stage = now_ms();
 #endif
 
-    // Start small: screenshots compress well, and the growth loop below
-    // doubles the buffer only if the encoder actually needs more.
     // Seed the output buffer from a plausible size so the common case needs a
     // single allocation: raw frame bytes plus headroom, capped so a
     // pathological frame can't commit unbounded memory. Screenshots compress

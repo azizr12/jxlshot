@@ -68,7 +68,6 @@ static LRESULT CALLBACK AboutWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             // Extract libjxl version.
             // JxlEncoderVersion() returns a DECIMAL-encoded integer: major*1000000 + minor*1000 + patch.
             // (It is NOT byte-packed, so it must not be right-shifted/masked like a Windows FILEVERSION.)
-            // JxlEncoderVersion() is decimal-encoded: major*1000000 + minor*1000 + patch.
             uint32_t jxl_ver = JxlEncoderVersion();
             int jxl_major = jxl_ver / 1000000;
             int jxl_minor = (jxl_ver / 1000) % 1000;
@@ -79,10 +78,10 @@ static LRESULT CALLBACK AboutWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 #define PF_AVX512F_INSTRUCTIONS_AVAILABLE 41
 #endif
 #ifndef PF_AVX2_INSTRUCTIONS_AVAILABLE
-#define PF_AVX2_INSTRUCTIONS_AVAILABLE 34
+#define PF_AVX2_INSTRUCTIONS_AVAILABLE 40
 #endif
 #ifndef PF_AVX_INSTRUCTIONS_AVAILABLE
-#define PF_AVX_INSTRUCTIONS_AVAILABLE 33
+#define PF_AVX_INSTRUCTIONS_AVAILABLE 39
 #endif
 
             // Detect CPU instruction sets
@@ -167,7 +166,7 @@ static LRESULT CALLBACK AboutWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
             // 2. Interactive controls (e.g., hyperlink): Treat as client so they can be clicked
             HWND hChild = ChildWindowFromPoint(hwnd, pt);
-            if (hChild != NULL && hChild != hwnd && GetDlgCtrlID(hChild) == IDC_ABOUT_LINK) {
+            if (hChild != NULL && GetDlgCtrlID(hChild) == IDC_ABOUT_LINK) {
                 return HTCLIENT;
             }
 
@@ -204,9 +203,8 @@ static LRESULT CALLBACK AboutWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         case WM_NOTIFY: {
-            LPNMHDR pnmh = (LPNMHDR)lParam;
-            if (pnmh->idFrom == IDC_ABOUT_LINK && pnmh->code == NM_CLICK) {
-                NMLINK* pnmLink = (NMLINK*)lParam;
+            NMLINK* pnmLink = (NMLINK*)lParam;
+            if (pnmLink->hdr.idFrom == IDC_ABOUT_LINK && pnmLink->hdr.code == NM_CLICK) {
                 ShellExecuteW(hwnd, L"open", pnmLink->item.szUrl, NULL, NULL, SW_SHOWNORMAL);
                 return 0;
             }
@@ -221,14 +219,11 @@ static LRESULT CALLBACK AboutWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
             // CRITICAL: DO NOT destroy g_hAppIcon here.
             // It is shared with the main tray application.
-            
             // Destroying it here will cause a "broken icon" bug in the system tray.
 
             // CRITICAL: DO NOT call PostQuitMessage(0) here.
             // It will terminate your entire tray application when this dialog closes.
 
-            // g_hAppIcon is shared with the tray app: destroying it here leaves a
-            // broken tray icon. PostQuitMessage would kill the whole application.
             g_hwndAbout = NULL;
             return 0;
     }
@@ -261,8 +256,7 @@ static void execute_about(void) {
     // Register the window class exactly once.
     static BOOL registered = FALSE;
     if (!registered) {
-        WNDCLASSEXW wc = {0};
-        wc.cbSize = sizeof(wc);
+        WNDCLASSEXW wc = { sizeof(wc) };
         wc.lpfnWndProc = AboutWindowProc;
         wc.hInstance = GetModuleHandleW(NULL);
         wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
@@ -294,7 +288,6 @@ static void execute_about(void) {
 
     if (g_hwndAbout) {
         SetForegroundWindow(g_hwndAbout);
-
         // The main application's message loop will handle this window automatically.
     } else {
         MessageBoxW(NULL, L"Failed to create About dialog.", L"jxlshot", MB_ICONERROR);
