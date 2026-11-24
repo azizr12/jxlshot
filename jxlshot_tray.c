@@ -1,7 +1,9 @@
 //      https://github.com/azizr12/jxlshot/
 
 // this app purpose is to be light and small.
-// less garbage UI, and code = speed
+// JPEG XL only screenshot app with support of its features
+
+// & this app aims to be less garbage UI, and code = speed
 // trying to implement something fancy will just make it like the others
 // who take megabytes of binary data for a stupid key detection & screenshot
 
@@ -11,10 +13,8 @@
 // Debug logs are written to jxlshot_debug.log next to the executable (opened
 // fresh at every start, truncating the previous run's data to 0 bytes).
 
-
 //  jxlshot_tray.exe           "opens the Capture Tool window"
 //  jxlshot_tray.exe -silent   "tray only"
-
 
 #define _WIN32_IE 0x0600
 #define UNICODE
