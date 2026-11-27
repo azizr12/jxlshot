@@ -1,4 +1,4 @@
-v2.5.2 - 
+v2.5.2 - 27 November 2026
 - fixed multimonitor naming issue
 
 v2.5.1 - 15 November 2026
